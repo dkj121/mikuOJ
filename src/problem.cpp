@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <fstream>
-#include <set>
 
 namespace cppjudge {
 
@@ -19,7 +18,18 @@ constexpr uint64_t kMaxMemoryMb = 16 * 1024;
 constexpr uint64_t kMaxOutputMb = 1024;
 constexpr uint64_t kMaxCompileTimeMs = 120'000;
 
-const std::set<std::string> kValidSandboxTypes = {"auto", "builtin", "linux-ns"};
+// 合法值集合。
+constexpr const char* kValidSandboxTypes[] = {"auto", "builtin", "linux-ns"};
+constexpr const char* kValidCompareModes[] = {"exact", "floating"};
+
+// 检查字符串是否在 constexpr 数组中。
+template <size_t N>
+bool contains(const char* const (&arr)[N], const std::string& v) {
+    for (size_t i = 0; i < N; ++i) {
+        if (v == arr[i]) return true;
+    }
+    return false;
+}
 
 // 读取 YAML 键值，缺失时返回默认值；类型不匹配时抛出并报告键名。
 template <typename T>
@@ -201,13 +211,13 @@ uint64_t ProblemManager::safe_wall_time(uint64_t cpu_time_ms) {
     }
 
     // 比较模式
-    if (problem.compare_mode != "exact" && problem.compare_mode != "floating") {
+    if (!contains(kValidCompareModes, problem.compare_mode)) {
         error = "compare_mode must be 'exact' or 'floating'";
         return false;
     }
 
     // 沙箱类型
-    if (kValidSandboxTypes.find(problem.sandbox_type) == kValidSandboxTypes.end()) {
+    if (!contains(kValidSandboxTypes, problem.sandbox_type)) {
         error = "sandbox_type must be one of: auto, builtin, linux-ns";
         return false;
     }
