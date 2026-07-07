@@ -27,12 +27,22 @@ struct Problem {
 
 class ProblemManager {
 public:
+    // ---- 限制上界 ----
+    static constexpr uint64_t kMaxCpuTimeMs      = 60'000;    // 60 s
+    static constexpr uint64_t kMaxWallTimeMs     = 180'000;   // 3 min
+    static constexpr uint64_t kMaxMemoryMb       = 16 * 1024; // 16 GiB
+    static constexpr uint64_t kMaxOutputMb       = 1024;      // 1 GiB
+    static constexpr uint64_t kMaxCompileTimeMs  = 120'000;   // 2 min
+
+    // 无溢出的墙上时间计算（clamp to kMaxWallTimeMs）。
+    static uint64_t safe_wall_time(uint64_t cpu_time_ms);
+
     // 从目录加载题目（problem.json + input/*.in + output/*.out）。失败返回 nullptr 并写 error。
-    static std::unique_ptr<Problem> load(const std::string& problem_dir,
-                                         std::string& error);
+    [[nodiscard]] static std::unique_ptr<Problem> load(
+        const std::string& problem_dir, std::string& error);
 
     // 校验题目完整性。
-    static bool validate(const Problem& problem, std::string& error);
+    [[nodiscard]] static bool validate(const Problem& problem, std::string& error);
 };
 
 } // namespace cppjudge
