@@ -97,7 +97,7 @@ uint64_t ProblemManager::safe_wall_time(uint64_t cpu_time_ms) {
 
         // 墙上时间：JSON 显式设置优先，否则 CPU×3
         if (root["wall_time_ms"]) {
-            problem->limits.wall_time_ms = root["wall_time_ms"].as<uint64_t>();
+            problem->limits.wall_time_ms = get_or<uint64_t>(root, "wall_time_ms", 0);
         } else {
             problem->limits.wall_time_ms = safe_wall_time(
                 problem->limits.cpu_time_ms);
@@ -186,6 +186,9 @@ uint64_t ProblemManager::safe_wall_time(uint64_t cpu_time_ms) {
     }
 
     // 输出限制
+    if (problem.limits.output_size_mb == 0) {
+        error = "output_limit_mb is 0"; return false;
+    }
     if (problem.limits.output_size_mb > kMaxOutputMb) {
         error = "output_limit_mb exceeds maximum (" +
                 std::to_string(kMaxOutputMb) + ")"; return false;
@@ -223,6 +226,9 @@ uint64_t ProblemManager::safe_wall_time(uint64_t cpu_time_ms) {
     if (problem.limits.stack_mb == 0) {
         error = "stack_limit_mb is 0"; return false;
     }
+    if (problem.limits.stack_mb > 4096) {
+        error = "stack_limit_mb exceeds maximum (4096)"; return false;
+    }
     if (problem.limits.max_processes == 0) {
         error = "max_processes is 0"; return false;
     }
@@ -230,10 +236,14 @@ uint64_t ProblemManager::safe_wall_time(uint64_t cpu_time_ms) {
         error = "max_processes exceeds maximum (1024)"; return false;
     }
 
-    // 墙上时间：不得低于 CPU 时间
+    // 墙上时间：必须 ≥ CPU 时间，不允许零值绕过
     if (problem.limits.wall_time_ms > kMaxWallTimeMs) {
         error = "wall_time_ms exceeds maximum (" +
                 std::to_string(kMaxWallTimeMs) + ")"; return false;
+    }
+    if (problem.limits.cpu_time_ms > 0 && problem.limits.wall_time_ms == 0) {
+        error = "wall_time_ms is 0 (must be >= time_limit_ms)";
+        return false;
     }
     if (problem.limits.wall_time_ms > 0 &&
         problem.limits.wall_time_ms < problem.limits.cpu_time_ms) {

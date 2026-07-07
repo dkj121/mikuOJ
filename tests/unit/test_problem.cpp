@@ -99,6 +99,19 @@ TEST(ProblemManager, SafeWallTimeNormal) {
     EXPECT_EQ(ProblemManager::safe_wall_time(0), 0u);
 }
 
+TEST(ProblemManager, ValidateRejectsZeroWallWithNonZeroCpu) {
+    Problem p;
+    p.title = "test";
+    p.limits.cpu_time_ms = 2000;
+    p.limits.memory_mb = 256;
+    p.limits.wall_time_ms = 0;  // 显式设零绕过墙壁时间限制
+    p.compare_mode = "exact";
+    p.test_cases = {{"/tmp/1.in", "/tmp/1.out", 1}};
+    std::string err;
+    EXPECT_FALSE(ProblemManager::validate(p, err));
+    EXPECT_NE(err.find("wall_time_ms"), std::string::npos);
+}
+
 // ---- validate: 上界拒绝 ----
 
 TEST(ProblemManager, ValidateRejectsExcessiveCpuTime) {
@@ -123,6 +136,19 @@ TEST(ProblemManager, ValidateRejectsExcessiveMemory) {
     std::string err;
     EXPECT_FALSE(ProblemManager::validate(p, err));
     EXPECT_NE(err.find("memory_limit_mb"), std::string::npos);
+}
+
+TEST(ProblemManager, ValidateRejectsZeroOutputSize) {
+    Problem p;
+    p.title = "test";
+    p.limits.cpu_time_ms = 1000;
+    p.limits.memory_mb = 256;
+    p.limits.output_size_mb = 0;
+    p.compare_mode = "exact";
+    p.test_cases = {{"/tmp/1.in", "/tmp/1.out", 1}};
+    std::string err;
+    EXPECT_FALSE(ProblemManager::validate(p, err));
+    EXPECT_NE(err.find("output_limit_mb"), std::string::npos);
 }
 
 TEST(ProblemManager, ValidateRejectsExcessiveOutput) {
@@ -230,6 +256,19 @@ TEST(ProblemManager, ValidateRejectsZeroStack) {
     p.limits.cpu_time_ms = 1000;
     p.limits.memory_mb = 256;
     p.limits.stack_mb = 0;
+    p.compare_mode = "exact";
+    p.test_cases = {{"/tmp/1.in", "/tmp/1.out", 1}};
+    std::string err;
+    EXPECT_FALSE(ProblemManager::validate(p, err));
+    EXPECT_NE(err.find("stack_limit_mb"), std::string::npos);
+}
+
+TEST(ProblemManager, ValidateRejectsExcessiveStack) {
+    Problem p;
+    p.title = "test";
+    p.limits.cpu_time_ms = 1000;
+    p.limits.memory_mb = 256;
+    p.limits.stack_mb = 4097;
     p.compare_mode = "exact";
     p.test_cases = {{"/tmp/1.in", "/tmp/1.out", 1}};
     std::string err;
@@ -358,4 +397,24 @@ TEST(ProblemManager, LoadsDefaultsWhenFieldsMissing) {
     EXPECT_EQ(p->limits.stack_mb, 8u);
     EXPECT_EQ(p->limits.max_processes, 64u);
     EXPECT_EQ(p->limits.wall_time_ms, 3000u);
+}
+
+TEST(ProblemManager, LoadsExplicitZeroWallTime) {
+    TempProblem tp("zerowall");
+    tp.json(R"({"title":"z","time_limit_ms":2000,"memory_limit_mb":64,"wall_time_ms":0})");
+    tp.case_pair("1");
+    std::string err;
+    auto p = ProblemManager::load(tp.dir.string(), err);
+    ASSERT_NE(p, nullptr) << err;
+    EXPECT_EQ(p->limits.wall_time_ms, 0u);
+}
+
+TEST(ProblemManager, LoadFailsOnWallTimeMsTypeError) {
+    TempProblem tp("badwall");
+    tp.json(R"({"title":"b","time_limit_ms":1000,"memory_limit_mb":64,"wall_time_ms":"abc"})");
+    tp.case_pair("1");
+    std::string err;
+    auto p = ProblemManager::load(tp.dir.string(), err);
+    EXPECT_EQ(p, nullptr);
+    EXPECT_NE(err.find("wall_time_ms"), std::string::npos);
 }

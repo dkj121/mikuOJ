@@ -169,11 +169,13 @@ int run_judge(int argc, char* argv[]) {
 
     // 解析限制：以题目为基线，CLI 显式覆盖（修 D10）
     Limits limits = problem->limits;
-    if (a.cpu_time_ms) limits.cpu_time_ms   = *a.cpu_time_ms;
+    if (a.cpu_time_ms) {
+        limits.cpu_time_ms   = *a.cpu_time_ms;
+        limits.wall_time_ms  = ProblemManager::safe_wall_time(limits.cpu_time_ms);
+    }
     if (a.memory_mb)   limits.memory_mb     = *a.memory_mb;
     if (a.output_mb)   limits.output_size_mb = *a.output_mb;
     if (a.compile_ms)  limits.compile_time_ms = *a.compile_ms;
-    limits.wall_time_ms = ProblemManager::safe_wall_time(limits.cpu_time_ms);
 
     std::string compare_mode =
         !a.compare_mode.empty() ? a.compare_mode : problem->compare_mode;
