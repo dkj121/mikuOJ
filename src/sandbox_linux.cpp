@@ -93,7 +93,10 @@ int child_main(ChildContext* ctx) {
 
     // 2. 新根：bind 白名单 + pivot_root（D2 挂载暂存）
     auto setup = ns::Manager::setup_rootfs(ctx->mounts, ctx->new_root);
-    if (!setup.ok) return fail(126);  // 判题系统故障 → SE（D12）
+    if (!setup.ok) {
+        dprintf(STDERR_FILENO, "setup_rootfs failed: %s\n", setup.error.c_str());
+        return fail(126);  // 判题系统故障 → SE（D12）
+    }
 
     // 3. 进入工作目录
     if (chdir(kBox) != 0) return fail(126);
@@ -139,13 +142,19 @@ int child_main(ChildContext* ctx) {
     sandbox_detail::build_argv(req, argv_store, argv);
     sandbox_detail::build_envp(req, envp_store, envp);
     execve(req.executable.c_str(), argv.data(), envp.data());
+    dprintf(STDERR_FILENO,
+            "execve failed: executable=%s errno=%d (%s) access=%d ld_access=%d\n",
+            req.executable.c_str(),
+            errno,
+            strerror(errno),
+            access(req.executable.c_str(), X_OK),
+            access("/lib64/ld-linux-x86-64.so.2", X_OK));
     return fail(127);
 }
 
 class LinuxNsSandbox final : public SandboxBackend {
 public:
     SandboxResult execute(const SandboxRequest& req) override;
-    bool          is_secure() const override { return true; }
     const char*   name() const override { return "linux-ns"; }
 };
 
@@ -177,8 +186,9 @@ SandboxResult LinuxNsSandbox::execute(const SandboxRequest& req) {
     for (const auto& m : req.extra_mounts) mounts.push_back(m);
     // 基础只读依赖。含 /usr/share：Debian/Ubuntu 下 GOROOT/src、部分 rustlib、
     // JVM 资源以符号链接指向 /usr/share，缺它会导致 Go/Rust/Java 编译失败。
-    for (const char* base : {"/lib", "/lib64", "/usr/lib", "/usr/bin",
-                             "/usr/share", "/etc/alternatives"}) {
+    for (const char* base : {"/bin", "/lib", "/lib64", "/usr/lib", "/usr/lib64",
+                             "/usr/libexec", "/usr/bin", "/usr/share",
+                             "/etc/alternatives"}) {
         mounts.push_back({base, base, false});
     }
 

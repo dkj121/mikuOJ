@@ -75,7 +75,7 @@ struct JudgeConfig {
     std::string submission_file;
     Limits      limits;
     std::string compare_mode;    // "exact" | "floating"
-    std::string sandbox_type;    // "builtin" | "nsjail"
+    std::string sandbox_type;    // "auto" | "linux-ns" | "nsjail"
     double      float_abs_eps = 1e-9;
     double      float_rel_eps = 1e-6;
     bool        verbose       = false;

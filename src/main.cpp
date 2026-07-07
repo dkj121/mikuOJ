@@ -69,23 +69,24 @@ void emit_result(Verdict v, int test_count = -1) {
 }
 
 void print_usage(const char* prog) {
-    std::cerr << "Usage: " << prog << " <command> [options]\n\n"
-              << "Commands:\n"
-              << "  judge     Judge a submission\n"
-              << "  doctor    Check environment readiness\n"
-              << "  version   Print version\n"
-              << "  help      Show this help\n\n"
-              << "Judge options:\n"
-              << "  --problem=<dir>            Problem directory (required)\n"
-              << "  --submission=<file>        Submission file (required)\n"
-              << "  --lang=<lang>              Language override (cpp/c/python3/java/go/rust)\n"
-              << "  --time-limit-ms=<N>        CPU time limit override\n"
-              << "  --memory-limit-mb=<N>      Memory limit override\n"
-              << "  --output-limit-mb=<N>      Output size limit override\n"
-              << "  --compile-time-limit-ms=<N>\n"
-              << "  --compare-mode=<mode>      'exact' or 'floating'\n"
-              << "  --sandbox-type=<type>      'auto' | 'builtin' | 'linux-ns'\n"
-              << "  --verbose                  Verbose diagnostics\n";
+    std::cerr
+        << "Usage: " << prog << " <command> [options]\n\n"
+        << "Commands:\n"
+        << "  judge     Judge a submission\n"
+        << "  doctor    Check environment readiness\n"
+        << "  version   Print version\n"
+        << "  help      Show this help\n\n"
+        << "Judge options:\n"
+        << "  --problem=<dir>            Problem directory (required)\n"
+        << "  --submission=<file>        Submission file (required)\n"
+        << "  --lang=<lang>              Language override (cpp/c/python3/java/go/rust)\n"
+        << "  --time-limit-ms=<N>        CPU time limit override\n"
+        << "  --memory-limit-mb=<N>      Memory limit override\n"
+        << "  --output-limit-mb=<N>      Output size limit override\n"
+        << "  --compile-time-limit-ms=<N>\n"
+        << "  --compare-mode=<mode>      'exact' or 'floating'\n"
+        << "  --sandbox-type=<type>      'auto' | 'linux-ns' | 'nsjail'\n"
+        << "  --verbose                  Verbose diagnostics\n";
 }
 
 struct JudgeArgs {
@@ -253,7 +254,7 @@ int run_judge(int argc, char* argv[]) {
         spdlog::info("compile error");
         RunResult rr;
         rr.verdict = Verdict::CE;
-        rr.error_detail = comp.output;
+        rr.error_detail = comp.output.empty() ? comp.error_detail : comp.output;
         rr.run_id = run_dir;
         rr.run_dir = run_dir;
         Logger::write_log("build/judge_log.json", a.problem_dir, a.submission_file, Verdict::CE,

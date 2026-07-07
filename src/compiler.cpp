@@ -108,6 +108,13 @@ CompileResult Compiler::compile(SandboxBackend& backend,
     } else {
         r.success = false;
         r.verdict = Verdict::CE;
+        if (r.output.empty()) {
+            r.error_detail =
+                "compiler did not produce artifact '" + rt.artifact_name +
+                "'; sandbox verdict=" + verdict_to_string(sr.verdict) +
+                ", exit_code=" + std::to_string(sr.exit_code) +
+                ", signal=" + std::to_string(sr.signal_num);
+        }
     }
     return r;
 }

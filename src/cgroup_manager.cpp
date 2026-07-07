@@ -23,13 +23,18 @@ std::string read_all(const std::string& path) {
                        std::istreambuf_iterator<char>());
 }
 
-// 安全解析 u64（空/非法 → 0，绝不抛异常，修 D15）。
+// 安全解析 u64（空/非法 → 0，溢出 → UINT64_MAX，绝不抛异常，修 D15）。
 uint64_t parse_u64(const std::string& s) {
     uint64_t v = 0;
     bool any = false;
     for (char c : s) {
         if (c >= '0' && c <= '9') {
-            v = v * 10 + static_cast<uint64_t>(c - '0');
+            uint64_t digit = static_cast<uint64_t>(c - '0');
+            // 溢出检测：如果 v * 10 + digit > UINT64_MAX，饱和到最大值
+            if (v > (UINT64_MAX - digit) / 10) {
+                return UINT64_MAX;
+            }
+            v = v * 10 + digit;
             any = true;
         } else if (any) {
             break;
@@ -67,6 +72,7 @@ void migrate_procs(const std::string& from_dir, const std::string& to_dir) {
 
 bool Manager::is_cgroup_v2_available() {
     std::ifstream mounts("/proc/mounts");
+    if (!mounts.is_open()) return false;
     std::string line;
     while (std::getline(mounts, line)) {
         if (line.find("cgroup2") != std::string::npos &&
@@ -80,6 +86,11 @@ bool Manager::is_cgroup_v2_available() {
 Manager Manager::create(const std::string& sandbox_id) {
     Manager m;
     if (sandbox_id.empty()) return m;
+    // 防止路径穿越（安全性：拒绝包含 / 或 .. 的 sandbox_id）
+    if (sandbox_id.find('/') != std::string::npos ||
+        sandbox_id.find("..") != std::string::npos) {
+        return m;  // valid_ 保持 false
+    }
 
     // 建父层级并委派控制器。真机 root 是 "no internal processes" 规则的例外，可直接委派。
     mkdir(kParent, 0755);  // 忽略 EEXIST
@@ -165,11 +176,17 @@ Stats Manager::collect() const {
 void Manager::destroy() {
     if (!valid_) return;
     write_control("cgroup.kill", "1");
-    // 轮询直到无进程再 rmdir（修 D14：kill 是异步的，直接 rmdir 会 EBUSY）
+    // 快速路径：大部分情况下 cgroup 为空或立即清空，先检查一次
+    if (read_control("cgroup.procs").empty()) {
+        rmdir(path_.c_str());
+        valid_ = false;
+        return;
+    }
+    // 慢速路径：轮询直到无进程再 rmdir（修 D14：kill 是异步的，直接 rmdir 会 EBUSY）
     for (int i = 0; i < 200; ++i) {
-        if (read_control("cgroup.procs").empty()) break;
         struct timespec ts{0, 5 * 1000 * 1000};  // 5ms
         nanosleep(&ts, nullptr);
+        if (read_control("cgroup.procs").empty()) break;
     }
     rmdir(path_.c_str());
     valid_ = false;

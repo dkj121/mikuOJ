@@ -175,6 +175,7 @@ SetupResult Manager::bind_minimal_devices(const std::string& new_root) {
     for (const auto& n : nodes) {
         std::string p = dev_dir + "/" + n.name;
         mknod(p.c_str(), n.mode, makedev(n.major, n.minor));  // best-effort
+        chmod(p.c_str(), n.mode & 0777);                       // mknod obeys umask
     }
     // std{in,out,err}/fd → /proc/self/fd（best-effort，失败非致命）
     int rc = 0;
