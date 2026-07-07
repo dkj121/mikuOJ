@@ -176,11 +176,16 @@ SetupResult Manager::bind_minimal_devices(const std::string& new_root) {
         std::string p = dev_dir + "/" + n.name;
         mknod(p.c_str(), n.mode, makedev(n.major, n.minor));  // best-effort
     }
-    // std{in,out,err}/fd → /proc/self/fd
-    symlink("/proc/self/fd", (dev_dir + "/fd").c_str());
-    symlink("/proc/self/fd/0", (dev_dir + "/stdin").c_str());
-    symlink("/proc/self/fd/1", (dev_dir + "/stdout").c_str());
-    symlink("/proc/self/fd/2", (dev_dir + "/stderr").c_str());
+    // std{in,out,err}/fd → /proc/self/fd（best-effort，失败非致命）
+    int rc = 0;
+    rc = symlink("/proc/self/fd", (dev_dir + "/fd").c_str());
+    (void)rc;  // 忽略错误：EEXIST 或权限问题不影响核心功能
+    rc = symlink("/proc/self/fd/0", (dev_dir + "/stdin").c_str());
+    (void)rc;
+    rc = symlink("/proc/self/fd/1", (dev_dir + "/stdout").c_str());
+    (void)rc;
+    rc = symlink("/proc/self/fd/2", (dev_dir + "/stderr").c_str());
+    (void)rc;
     return r;
 }
 
