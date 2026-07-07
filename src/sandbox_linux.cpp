@@ -1,0 +1,324 @@
+// Linux 安全沙箱后端：namespace + cgroup v2 + seccomp + 权限丢弃。
+// 子进程执行顺序（绝对不可乱）：
+//   open stdio(宿主路径) → dup2 → setup_rootfs(bind+pivot) → chdir(/box)
+//   → setrlimit → [ready→父 attach cgroup→proceed 门控] → drop_privileges
+//   → seccomp(compile/run profile) → execve
+// 修复：D1(cgroup attach-before-exec 门控) D2(挂载暂存+pivot 前开 stdio, 不继承 fd)
+//       D3(降权) D4(SIGSYS→SV) D6(编译独立 profile) D7(CPU 采样 kill) D12(errno 管道→SE)
+
+#include "cppjudge/cgroup_manager.h"
+#include "cppjudge/ns_manager.h"
+#include "cppjudge/sandbox_internal.h"
+#include "cppjudge/seccomp_manager.h"
+
+#include <fcntl.h>
+#include <poll.h>
+#include <sched.h>
+#include <signal.h>
+#include <sys/resource.h>  // setrlimit / rlimit
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <time.h>
+#include <unistd.h>
+
+#include <atomic>
+#include <cerrno>
+#include <cstring>
+#include <random>
+#include <string>
+#include <vector>
+
+namespace cppjudge {
+namespace {
+
+using sandbox_detail::RawOutcome;
+
+constexpr const char* kBox = "/box";  // work_dir 在沙箱内的挂载点
+
+uint64_t mono_ms() {
+    struct timespec ts{};
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return static_cast<uint64_t>(ts.tv_sec) * 1000ULL + ts.tv_nsec / 1000000ULL;
+}
+
+std::string unique_id() {
+    static std::atomic<uint64_t> counter{0};
+    std::random_device rd;
+    uint64_t rnd = (static_cast<uint64_t>(rd()) << 32) ^ rd();
+    return std::to_string(getpid()) + "-" +
+           std::to_string(counter.fetch_add(1)) + "-" +
+           std::to_string(rnd);
+}
+
+struct ChildContext {
+    const SandboxRequest* req;
+    std::vector<ns::MountEntry> mounts;
+    std::string new_root;
+    SeccompProfile profile;
+    int ready_w;     // 子→父：setup 完成
+    int proceed_r;   // 父→子：cgroup 已 attach，放行
+    int err_w;       // 子→父：errno（CLOEXEC，execve 成功即关）→ SE
+};
+
+// 子进程入口。返回值即退出码。
+int child_main(ChildContext* ctx) {
+    const SandboxRequest& req = *ctx->req;
+    auto fail = [&](int code) -> int {
+        int e = errno;
+        ssize_t rc = write(ctx->err_w, &e, sizeof(e));
+        (void)rc;
+        _exit(code);
+    };
+
+    // 1. 打开 stdio（宿主路径，pivot 前）→ dup2；失败绝不回退继承 fd（D2）
+    {
+        int fd = req.stdin_path.empty() ? open("/dev/null", O_RDONLY)
+                                        : open(req.stdin_path.c_str(), O_RDONLY);
+        if (fd < 0) return fail(126);
+        dup2(fd, STDIN_FILENO);
+        if (fd != STDIN_FILENO) close(fd);
+    }
+    if (!req.stdout_path.empty()) {
+        int fd = open(req.stdout_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd < 0) return fail(126);
+        dup2(fd, STDOUT_FILENO);
+        if (fd != STDOUT_FILENO) close(fd);
+    }
+    if (!req.stderr_path.empty()) {
+        int fd = open(req.stderr_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd < 0) return fail(126);
+        dup2(fd, STDERR_FILENO);
+        if (fd != STDERR_FILENO) close(fd);
+    }
+
+    // 2. 新根：bind 白名单 + pivot_root（D2 挂载暂存）
+    auto setup = ns::Manager::setup_rootfs(ctx->mounts, ctx->new_root);
+    if (!setup.ok) return fail(126);  // 判题系统故障 → SE（D12）
+
+    // 3. 进入工作目录
+    if (chdir(kBox) != 0) return fail(126);
+
+    // 4. 资源软限制
+    // （内存/CPU 主限制走 cgroup；此处设 stack/fsize + CPU 硬后备）
+    {
+        const Limits& L = req.limits;
+        auto set_rl = [](int res, uint64_t v) {
+            struct rlimit rl; rl.rlim_cur = v; rl.rlim_max = v; setrlimit(res, &rl);
+        };
+        if (L.stack_mb)       set_rl(RLIMIT_STACK, L.stack_mb * 1024ULL * 1024ULL);
+        if (L.output_size_mb) set_rl(RLIMIT_FSIZE, L.output_size_mb * 1024ULL * 1024ULL);
+        if (L.cpu_time_ms)    set_rl(RLIMIT_CPU, (L.cpu_time_ms + 999) / 1000 + 1);
+    }
+
+    // 5. 通知父就绪，等待父 attach cgroup 后放行（D1 attach-before-exec 门控）
+    {
+        char ready = 1;
+        ssize_t rc = write(ctx->ready_w, &ready, 1);
+        (void)rc;
+        close(ctx->ready_w);
+        char go = 0;
+        while (read(ctx->proceed_r, &go, 1) < 0 && errno == EINTR) {
+        }
+        close(ctx->proceed_r);
+    }
+
+    // 6. 丢弃权限（D3）
+    if (!ns::Manager::drop_privileges()) return fail(126);
+
+    // 7. seccomp —— execve 前绝对最后一步（编译/运行不同 profile，D6）
+    if (!seccomp::Manager::install(ctx->profile, req.is_compile)) return fail(126);
+
+    // 8. execve
+    std::vector<std::string> argv_store, envp_store;
+    std::vector<char*> argv, envp;
+    sandbox_detail::build_argv(req, argv_store, argv);
+    sandbox_detail::build_envp(req, envp_store, envp);
+    execve(req.executable.c_str(), argv.data(), envp.data());
+    return fail(127);
+}
+
+class LinuxNsSandbox final : public SandboxBackend {
+public:
+    SandboxResult execute(const SandboxRequest& req) override;
+    bool          is_secure() const override { return true; }
+    const char*   name() const override { return "linux-ns"; }
+};
+
+SandboxResult LinuxNsSandbox::execute(const SandboxRequest& req) {
+    SandboxResult result;
+
+    // 1. cgroup
+    const std::string id = unique_id();
+    auto cg = cgroup::Manager::create(id);
+    if (!cg.is_valid()) {
+        result.verdict = Verdict::SE;
+        result.error_detail = "failed to create cgroup (delegation?): " + id;
+        return result;
+    }
+    cgroup::Limits cl;
+    cl.cpu_time_us = req.limits.cpu_time_ms * 1000ULL;
+    cl.memory_bytes = req.limits.memory_mb * 1024ULL * 1024ULL;
+    cl.max_pids = req.limits.max_processes ? req.limits.max_processes : 64;
+    if (!cg.apply(cl)) {
+        result.verdict = Verdict::SE;
+        result.error_detail = "failed to apply cgroup limits (controllers not delegated)";
+        cg.destroy();
+        return result;
+    }
+
+    // 2. 挂载条目：work_dir→/box(rw) + 语言依赖 + 基础库
+    std::vector<ns::MountEntry> mounts;
+    mounts.push_back({req.work_dir, kBox, true});
+    for (const auto& m : req.extra_mounts) mounts.push_back(m);
+    for (const char* base : {"/lib", "/lib64", "/usr/lib", "/usr/bin"}) {
+        mounts.push_back({base, base, false});
+    }
+
+    std::string new_root = "/tmp/cppjudge." + id;
+    mkdir(new_root.c_str(), 0755);
+
+    // 3. 同步管道
+    int ready_pipe[2], proceed_pipe[2], err_pipe[2];
+    if (pipe2(ready_pipe, O_CLOEXEC) != 0 || pipe2(proceed_pipe, 0) != 0 ||
+        pipe2(err_pipe, O_CLOEXEC) != 0) {
+        result.verdict = Verdict::SE;
+        result.error_detail = "pipe2 failed";
+        cg.destroy();
+        return result;
+    }
+
+    ChildContext ctx;
+    ctx.req = &req;
+    ctx.mounts = mounts;
+    ctx.new_root = new_root;
+    ctx.profile = seccomp::profile_for_lang(req.lang);
+    ctx.ready_w = ready_pipe[1];
+    ctx.proceed_r = proceed_pipe[0];
+    ctx.err_w = err_pipe[1];
+
+    const uint64_t start = mono_ms();
+    pid_t child = ns::Manager::clone_and_exec(
+        ns::Manager::ALL_NS_FLAGS, [&ctx] { return child_main(&ctx); });
+
+    // 父进程关闭子端
+    close(ready_pipe[1]);
+    close(proceed_pipe[0]);
+    close(err_pipe[1]);
+
+    if (child < 0) {
+        result.verdict = Verdict::SE;
+        result.error_detail = std::string("clone failed: ") + strerror(errno);
+        close(ready_pipe[0]); close(proceed_pipe[1]); close(err_pipe[0]);
+        cg.destroy();
+        rmdir(new_root.c_str());
+        return result;
+    }
+
+    // 4. attach 到 cgroup（在放行前，保证 execve 前限制生效；修 D1）
+    cg.attach(child);
+
+    // 5. 等子就绪（有界），然后放行
+    {
+        struct pollfd pfd{ready_pipe[0], POLLIN, 0};
+        if (poll(&pfd, 1, 5000) <= 0) {
+            kill(child, SIGKILL);
+            waitpid(child, nullptr, 0);
+            close(ready_pipe[0]); close(proceed_pipe[1]); close(err_pipe[0]);
+            cg.destroy();
+            rmdir(new_root.c_str());
+            result.verdict = Verdict::SE;
+            result.error_detail = "child setup timed out";
+            return result;
+        }
+        char b; ssize_t rc = read(ready_pipe[0], &b, 1); (void)rc;
+        close(ready_pipe[0]);
+        char go = 1; rc = write(proceed_pipe[1], &go, 1); (void)rc;
+        close(proceed_pipe[1]);
+    }
+
+    // 6. 墙上超时 + CPU 采样 kill（D7）
+    const uint64_t wall_limit = req.limits.wall_time_ms
+                                    ? req.limits.wall_time_ms
+                                    : req.limits.cpu_time_ms * 3;
+    int status = 0;
+    bool wall_timeout = false, cpu_timeout = false;
+    while (true) {
+        pid_t w = waitpid(child, &status, WNOHANG);
+        if (w == child) break;
+        if (w < 0 && errno != EINTR) {
+            result.verdict = Verdict::SE;
+            result.error_detail = std::string("waitpid: ") + strerror(errno);
+            break;
+        }
+        uint64_t elapsed = mono_ms() - start;
+        cgroup::Stats live = cg.collect();
+        if (req.limits.cpu_time_ms && live.cpu_usage_us / 1000ULL > req.limits.cpu_time_ms) {
+            cpu_timeout = true;
+        }
+        if ((wall_limit && elapsed >= wall_limit) || cpu_timeout) {
+            wall_timeout = wall_timeout || (wall_limit && elapsed >= wall_limit);
+            cg.destroy();               // cgroup.kill 整个子树
+            waitpid(child, &status, 0); // 有界回收
+            break;
+        }
+        struct timespec ts{0, 3 * 1000 * 1000};  // 3ms
+        nanosleep(&ts, nullptr);
+    }
+    const uint64_t wall_ms = mono_ms() - start;
+
+    // 7. 读 setup/exec 错误码
+    int child_errno = 0;
+    ssize_t n = read(err_pipe[0], &child_errno, sizeof(child_errno));
+    close(err_pipe[0]);
+
+    // 8. 资源统计
+    cgroup::Stats stats = cg.collect();
+
+    RawOutcome o;
+    o.secure_backend = true;
+    o.wall_time_ms = wall_ms;
+    o.wall_timed_out = wall_timeout;
+    o.cpu_timed_out = cpu_timeout;
+    o.cpu_time_ms = stats.cpu_usage_us / 1000ULL;
+    o.memory_kb = stats.memory_peak_kb ? stats.memory_peak_kb : stats.memory_kb;
+    o.oom_killed = stats.oom_killed;
+    o.output_bytes = sandbox_detail::file_size(req.stdout_path);
+
+    if (WIFEXITED(status)) {
+        o.exited = true;
+        o.exit_code = WEXITSTATUS(status);
+        if (n == static_cast<ssize_t>(sizeof(child_errno)) &&
+            (o.exit_code == 126 || o.exit_code == 127)) {
+            result.verdict = Verdict::SE;
+            result.error_detail =
+                "sandbox setup/exec failed: " + std::string(strerror(child_errno));
+            cg.destroy();
+            rmdir(new_root.c_str());
+            return result;
+        }
+    } else if (WIFSIGNALED(status)) {
+        o.signaled = true;
+        o.signal_num = WTERMSIG(status);
+    }
+
+    bool truncated = false;
+    result.verdict = sandbox_detail::derive_verdict(o, req.limits, truncated);
+    result.exit_code = o.exit_code;
+    result.signal_num = o.signal_num;
+    result.time_ms = o.cpu_time_ms;
+    result.wall_time_ms = o.wall_time_ms;
+    result.memory_kb = o.memory_kb;
+    result.output_truncated = truncated;
+
+    cg.destroy();
+    rmdir(new_root.c_str());
+    return result;
+}
+
+} // namespace
+
+std::unique_ptr<SandboxBackend> make_linux_ns_sandbox() {
+    return std::make_unique<LinuxNsSandbox>();
+}
+
+} // namespace cppjudge

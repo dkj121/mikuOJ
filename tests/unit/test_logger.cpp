@@ -28,8 +28,7 @@ TEST(Logger, WriteLogEscapesInjection) {
     r.test_index = 1;
     r.compare_detail = "value has \"quote\" and \\slash";  // 可能的 JSON 注入
 
-    ::mkdir("build", 0755);
-    const std::string path = "build/test_judge_log.json";
+    const std::string path = ::testing::TempDir() + "cppjudge_test_log.json";
     ASSERT_TRUE(Logger::write_log(path, "p/dir", "s.cpp", Verdict::AC, {r}));
 
     std::ifstream f(path);

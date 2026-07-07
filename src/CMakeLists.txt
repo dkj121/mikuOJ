@@ -36,6 +36,8 @@ target_link_libraries(cppjudge_core PUBLIC
 if(UNIX AND NOT APPLE)
     target_include_directories(cppjudge_core PRIVATE ${LIBSECCOMP_INCLUDE_DIRS})
     target_link_libraries(cppjudge_core PUBLIC ${LIBSECCOMP_LIBRARIES})
+    # clone/setresuid/pivot_root 等需要 GNU 扩展（默认 gnu++20 已含，显式保险）
+    target_compile_definitions(cppjudge_core PRIVATE _GNU_SOURCE)
 endif()
 
 add_executable(cppjudge main.cpp)
