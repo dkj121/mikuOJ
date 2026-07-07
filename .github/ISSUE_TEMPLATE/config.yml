@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞报告
+    url: https://github.com/orange11-forever/Temp/security/advisories/new
+    about: 沙箱逃逸/隔离绕过请私下报告，勿开公开 issue（见 SECURITY.md）。
