@@ -32,19 +32,26 @@ std::vector<std::string> strict_names() {
         "futex", "sched_yield",
         "arch_prctl", "set_tid_address", "set_robust_list", "get_robust_list",
         "prlimit64", "getcwd", "uname", "sysinfo", "getrusage", "rseq",
+        // 信号自投递：glibc 的 raise()/abort()/assert 失败经 tgkill 投递 SIGABRT。
+        // 缺失会导致正常的 C/C++ 运行时错误（未捕获异常、断言、栈溢出保护）
+        // 被 seccomp 以 SIGSYS 杀死，误判为 SV 而非 RE。
+        "tgkill", "tkill",
+        // 阻塞型系统调用被信号中断后，内核用 restart_syscall 续跑（ERESTART_RESTARTBLOCK）。
+        "restart_syscall",
     };
 }
 
 // Standard（Go/Rust）：多线程 + 调度 + epoll
 std::vector<std::string> standard_names() {
     std::vector<std::string> v = strict_names();
+    // 注：tgkill/tkill/restart_syscall 已在 strict_names() 基础集合中。
     for (const char* n : {"clone", "clone3",
                           "sched_getaffinity", "sched_setaffinity",
                           "sched_getparam", "sched_getscheduler",
-                          "tgkill", "tkill", "membarrier",
+                          "membarrier",
                           "epoll_create1", "epoll_ctl", "epoll_pwait",
                           "epoll_pwait2", "epoll_wait",
-                          "eventfd2", "pipe2", "restart_syscall"}) {
+                          "eventfd2", "pipe2"}) {
         v.emplace_back(n);
     }
     return v;
