@@ -22,6 +22,24 @@ TEST(Logger, JsonEscapeControlChar) {
     EXPECT_EQ(Logger::json_escape(std::string("\x01")), "\\u0001");
 }
 
+TEST(Logger, JsonEscapeInvalidUtf8ByteReplaced) {
+    // 孤立的 0x80 续接字节不是合法 UTF-8，须替换为 U+FFFD 转义，避免产出非法 UTF-8。
+    EXPECT_EQ(Logger::json_escape(std::string("\x80")), "\\ufffd");
+    // 截断的多字节序列（0xE4 后无续接）同样替换。
+    EXPECT_EQ(Logger::json_escape(std::string("\xE4")), "\\ufffd");
+}
+
+TEST(Logger, JsonEscapeValidUtf8PassesThrough) {
+    // 合法 UTF-8（“中” = E4 B8 AD）原样保留。
+    const std::string zhong = "\xE4\xB8\xAD";
+    EXPECT_EQ(Logger::json_escape(zhong), zhong);
+}
+
+TEST(Logger, JsonEscapeDelPassesThrough) {
+    // 0x7F DEL 在 JSON 中合法，原样保留（不是 <0x20 控制字符）。
+    EXPECT_EQ(Logger::json_escape(std::string("\x7F")), std::string("\x7F"));
+}
+
 TEST(Logger, WriteLogEscapesInjection) {
     RunResult r;
     r.verdict = Verdict::AC;
