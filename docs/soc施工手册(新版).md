@@ -284,7 +284,7 @@ struct JudgeConfig {
     std::string submission_file;
     Limits      limits;
     std::string compare_mode;    // "exact" | "floating"
-    std::string sandbox_type;    // "builtin" | "nsjail"
+    std::string sandbox_type;    // "auto" | "linux-ns" | "nsjail"
     double      float_abs_eps = 1e-9;
     double      float_rel_eps = 1e-6;
     bool        verbose       = false;
@@ -1866,7 +1866,7 @@ struct Problem {
     std::string problem_dir;
     Limits      limits;
     std::string compare_mode;    // "exact" | "floating"
-    std::string sandbox_type;    // "builtin" | "nsjail"
+    std::string sandbox_type;    // "auto" | "linux-ns" | "nsjail"
     double      float_abs_eps = 1e-9;
     double      float_rel_eps = 1e-6;
 
@@ -3363,10 +3363,6 @@ static int run_judge(int argc, char* argv[]) {
     const char* env = std::getenv("CPPJUDGE_ENV");
     const char* prod = std::getenv("CPPJUDGE_PRODUCTION");
     bool is_prod = (env && std::string(env) == "production") || (prod && std::string(prod) == "1");
-    if (is_prod && config.sandbox_type == "builtin") {
-        std::cerr << "Error: builtin sandbox rejected in production mode\n";
-        return 3;
-    }
 
     // 2. 创建 run 目录
     std::string run_dir = cppjudge::Logger::create_run_dir("build");
@@ -3521,7 +3517,7 @@ static void print_usage(const char* prog) {
         << "  --output-limit-mb=<N>    Output size limit override\n"
         << "  --compile-time-limit-ms=<N>\n"
         << "  --compare-mode=<mode>    'exact' or 'floating'\n"
-        << "  --sandbox-type=<type>    'builtin' or 'nsjail'\n"
+        << "  --sandbox-type=<type>    'auto', 'linux-ns' or 'nsjail'\n"
         << "  --verbose                Detailed output\n";
 }
 

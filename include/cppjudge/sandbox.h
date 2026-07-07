@@ -42,7 +42,7 @@ struct SandboxResult {
 // ============================================================
 // 沙箱后端抽象。
 //   - LinuxNsSandbox（sandbox_linux.cpp，__linux__）：ns + cgroup + seccomp + privdrop，安全。
-//   - BuiltinSandbox（sandbox_darwin.cpp / Linux 回退）：fork + setrlimit + getrusage，不安全。
+// mikuOJ 的正式 OJ 路径只保留 Linux 安全沙箱。
 // ============================================================
 class SandboxBackend {
 public:
@@ -50,14 +50,11 @@ public:
 
     virtual SandboxResult execute(const SandboxRequest& req) = 0;
 
-    // 是否提供真正的隔离；不安全后端在生产模式被拒绝（fail-closed）。
-    virtual bool          is_secure() const = 0;
     virtual const char*   name()      const = 0;
 };
 
 // 后端类型标识（问题配置里的 sandbox_type 会映射到这些别名）。
-//   "auto"                 → 安全后端可用则用之，否则 builtin
-//   "builtin"              → 不安全的 rlimit 后端
+//   "auto"                 → Linux 安全后端
 //   "linux-ns" / "nsjail"  → Linux 安全后端（仅 __linux__）
 // 未知或当前平台不可用时返回 nullptr 并写入 error。
 std::unique_ptr<SandboxBackend> make_sandbox(const std::string& type, std::string& error);

@@ -13,7 +13,7 @@ struct Problem {
     std::string problem_dir;
     Limits      limits;
     std::string compare_mode = "exact";   // "exact" | "floating"
-    std::string sandbox_type = "auto";    // "auto" | "builtin" | "linux-ns"
+    std::string sandbox_type = "auto";    // "auto" | "linux-ns" | "nsjail"
     double      float_abs_eps = 1e-9;
     double      float_rel_eps = 1e-6;
 

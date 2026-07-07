@@ -77,7 +77,7 @@ void print_usage(const char* prog) {
         << "  --output-limit-mb=<N>      Output size limit override\n"
         << "  --compile-time-limit-ms=<N>\n"
         << "  --compare-mode=<mode>      'exact' or 'floating'\n"
-        << "  --sandbox-type=<type>      'auto' | 'builtin' | 'linux-ns'\n"
+        << "  --sandbox-type=<type>      'auto' | 'linux-ns' | 'nsjail'\n"
         << "  --verbose                  Verbose diagnostics\n";
 }
 
@@ -189,17 +189,7 @@ int run_judge(int argc, char* argv[]) {
         return 3;
     }
 
-    // 生产模式 fail-closed：不安全后端拒绝运行
-    const char* env = std::getenv("CPPJUDGE_ENV");
-    const char* prod = std::getenv("CPPJUDGE_PRODUCTION");
-    const bool is_prod = (env && std::string(env) == "production") ||
-                         (prod && std::string(prod) == "1");
-    if (is_prod && !backend->is_secure()) {
-        spdlog::error("insecure sandbox '{}' rejected in production mode", backend->name());
-        emit_result(Verdict::SE);
-        return 3;
-    }
-    spdlog::info("sandbox backend: {} (secure={})", backend->name(), backend->is_secure());
+    spdlog::info("sandbox backend: {}", backend->name());
 
     // 运行目录
     std::string run_dir = Logger::create_run_dir("build");
@@ -222,7 +212,7 @@ int run_judge(int argc, char* argv[]) {
         spdlog::info("compile error");
         RunResult rr;
         rr.verdict = Verdict::CE;
-        rr.error_detail = comp.output;
+        rr.error_detail = comp.output.empty() ? comp.error_detail : comp.output;
         rr.run_id = run_dir;
         rr.run_dir = run_dir;
         Logger::write_log("build/judge_log.json", a.problem_dir, a.submission_file,

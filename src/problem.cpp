@@ -101,6 +101,12 @@ bool ProblemManager::validate(const Problem& problem, std::string& error) {
         error = "compare_mode must be 'exact' or 'floating'";
         return false;
     }
+    if (problem.sandbox_type != "auto" &&
+        problem.sandbox_type != "linux-ns" &&
+        problem.sandbox_type != "nsjail") {
+        error = "sandbox_type must be 'auto', 'linux-ns', or 'nsjail'";
+        return false;
+    }
     if (problem.test_cases.empty())       { error = "no test cases"; return false; }
     return true;
 }

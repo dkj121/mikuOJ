@@ -13,7 +13,7 @@ labels: bug
 
 ## 复现步骤
 
-1. 后端（`linux-ns` / `builtin`）与命令：
+1. 后端（`linux-ns` / `nsjail`）与命令：
 
    ```
    sudo ./build/cppjudge judge --problem ... --submission ...

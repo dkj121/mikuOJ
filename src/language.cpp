@@ -1,5 +1,6 @@
 #include "cppjudge/language.h"
 
+#include <limits.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -86,6 +87,9 @@ std::vector<LanguageRuntimeConfig> build_configs() {
         // JVM 依赖：JDK 本体 + Debian 把 java.security 等配置放在 /etc/java-*
         c.extra_mounts = {{"/usr/lib/jvm", "/usr/lib/jvm", false},
                           {"/etc/alternatives", "/etc/alternatives", false},
+                          {"/etc/java", "/etc/java", false},
+                          {"/etc/crypto-policies", "/etc/crypto-policies", false},
+                          {"/etc/pki", "/etc/pki", false},
                           {"/etc/java-11-openjdk", "/etc/java-11-openjdk", false},
                           {"/etc/java-17-openjdk", "/etc/java-17-openjdk", false},
                           {"/etc/java-21-openjdk", "/etc/java-21-openjdk", false}};
@@ -107,6 +111,8 @@ std::vector<LanguageRuntimeConfig> build_configs() {
         c.seccomp_profile = SeccompProfile::Standard;
         c.extra_mounts = {{"/usr/lib/go", "/usr/lib/go", false}};
         c.compile_limits = kCompileLimits;
+        c.compile_limits.cpu_time_ms = 60000;
+        c.compile_limits.wall_time_ms = 120000;
         cfgs.push_back(c);
     }
     {   // Rust
@@ -138,6 +144,13 @@ std::string resolve_tool(const std::vector<std::string>& candidates) {
     auto is_exec = [](const std::string& p) {
         return !p.empty() && access(p.c_str(), X_OK) == 0;
     };
+    auto canonical_exec = [&](const std::string& p) {
+        char resolved[PATH_MAX];
+        if (realpath(p.c_str(), resolved) != nullptr) {
+            return std::string(resolved);
+        }
+        return p;
+    };
 
     std::vector<std::string> dirs;
     if (const char* path = std::getenv("PATH")) {
@@ -157,12 +170,12 @@ std::string resolve_tool(const std::vector<std::string>& candidates) {
 
     for (const auto& cand : candidates) {
         if (cand.find('/') != std::string::npos) {
-            if (is_exec(cand)) return cand;
+            if (is_exec(cand)) return canonical_exec(cand);
             continue;
         }
         for (const auto& dir : dirs) {
             std::string full = dir + "/" + cand;
-            if (is_exec(full)) return full;
+            if (is_exec(full)) return canonical_exec(full);
         }
     }
     return "";

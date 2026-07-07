@@ -9,7 +9,6 @@ set(CPPJUDGE_SOURCES
     compiler.cpp
     doctor.cpp
     sandbox_common.cpp
-    sandbox_builtin.cpp
 )
 
 # Linux 专有：安全沙箱后端 + 隔离管理器（Phase B）

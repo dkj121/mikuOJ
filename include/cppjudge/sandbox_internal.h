@@ -56,7 +56,6 @@ uint64_t file_size(const std::string& path);
 namespace cppjudge {
 
 // 平台后端工厂（由各平台 .cpp 定义，make_sandbox 分发）。
-std::unique_ptr<SandboxBackend> make_builtin_sandbox();      // 便携 POSIX，两平台都有
 #if defined(__linux__)
 std::unique_ptr<SandboxBackend> make_linux_ns_sandbox();     // 仅 Linux 安全后端
 #endif
