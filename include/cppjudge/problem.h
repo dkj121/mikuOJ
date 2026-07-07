@@ -11,31 +11,31 @@ namespace cppjudge {
 struct Problem {
     std::string title;
     std::string problem_dir;
-    Limits      limits;
-    std::string compare_mode = "exact";   // "exact" | "floating"
-    std::string sandbox_type = "auto";    // "auto" | "builtin" | "linux-ns"
-    double      float_abs_eps = 1e-9;
-    double      float_rel_eps = 1e-6;
+    Limits limits;
+    std::string compare_mode = "exact";  // "exact" | "floating"
+    std::string sandbox_type = "auto";   // "auto" | "builtin" | "linux-ns"
+    double float_abs_eps = 1e-9;
+    double float_rel_eps = 1e-6;
 
     struct TestCase {
         std::string input_file;
         std::string output_file;
-        int         index = 0;
+        int index = 0;
     };
     std::vector<TestCase> test_cases;
 };
 
 class ProblemManager {
-public:
+   public:
     // 无溢出的墙上时间计算（clamp 到内部上限）。
     static uint64_t safe_wall_time(uint64_t cpu_time_ms);
 
     // 从目录加载题目（problem.json + input/*.in + output/*.out）。失败返回 nullptr 并写 error。
-    [[nodiscard]] static std::unique_ptr<Problem> load(
-        const std::string& problem_dir, std::string& error);
+    [[nodiscard]] static std::unique_ptr<Problem> load(const std::string& problem_dir,
+                                                       std::string& error);
 
     // 校验题目完整性。
     [[nodiscard]] static bool validate(const Problem& problem, std::string& error);
 };
 
-} // namespace cppjudge
+}  // namespace cppjudge

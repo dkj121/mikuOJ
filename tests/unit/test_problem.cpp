@@ -27,11 +27,20 @@ struct TempProblem {
         f << content;
     }
     void case_pair(const std::string& stem) {
-        { std::ofstream f(dir / "input" / (stem + ".in")); f << "1 2\n"; }
-        { std::ofstream f(dir / "output" / (stem + ".out")); f << "3\n"; }
+        {
+            std::ofstream f(dir / "input" / (stem + ".in"));
+            f << "1 2\n";
+        }
+        {
+            std::ofstream f(dir / "output" / (stem + ".out"));
+            f << "3\n";
+        }
     }
     void dir_output(const std::string& stem) {
-        { std::ofstream f(dir / "input" / (stem + ".in")); f << "1 2\n"; }
+        {
+            std::ofstream f(dir / "input" / (stem + ".in"));
+            f << "1 2\n";
+        }
         fs::create_directory(dir / "output" / (stem + ".out"));
     }
 };
