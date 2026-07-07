@@ -27,7 +27,7 @@ labels: bug
 - OS / 内核：`uname -a`
 - cgroup v2：`mount | grep cgroup2`
 - 语言/工具链版本：
-- cppjudge 版本 / commit：
+- mikuOJ 版本 / commit：
 
 ## 附加信息
 

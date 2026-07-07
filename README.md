@@ -1,12 +1,12 @@
-# cppjudge
+# mikuOJ
 
 > 单机、多语言、安全隔离的竞赛判题系统 · A single-machine, multi-language, sandboxed competitive-programming judge
 
-[![CI](https://github.com/orange11-forever/Temp/actions/workflows/ci.yml/badge.svg)](https://github.com/orange11-forever/Temp/actions/workflows/ci.yml)
+[![CI](https://github.com/NJUPT-SAST-CXX/mikuOJ/actions/workflows/ci.yml/badge.svg)](https://github.com/NJUPT-SAST-CXX/mikuOJ/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C.svg)](https://en.cppreference.com/w/cpp/20)
 
-cppjudge 在 **Linux（WSL2 / 裸机）** 上用 **namespace + cgroup v2 + seccomp + 权限丢弃** 四层隔离，安全地编译并运行不受信任的提交，比较输出并聚合判决。同时提供一个 **macOS 开发后端**（无隔离，仅供本机开发与流水线自测）。
+mikuOJ 在 **Linux（WSL2 / 裸机）** 上用 **namespace + cgroup v2 + seccomp + 权限丢弃** 四层隔离，安全地编译并运行不受信任的提交，比较输出并聚合判决。同时提供一个 **macOS 开发后端**（无隔离，仅供本机开发与流水线自测）。
 
 ## 特性
 

@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
-project(cppjudge VERSION 0.1.0 LANGUAGES CXX)
+project(mikuOJ VERSION 0.1.0
+        DESCRIPTION "单机、多语言、安全隔离的竞赛判题系统"
+        LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
