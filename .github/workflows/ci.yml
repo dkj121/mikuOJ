@@ -14,14 +14,13 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt update
-          sudo apt install -y build-essential cmake \
-            libseccomp-dev libyaml-cpp-dev libgtest-dev \
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config git \
+            zlib1g-dev libseccomp-dev libyaml-cpp-dev \
+            libspdlog-dev libfmt-dev libgtest-dev \
             python3 default-jdk golang-go rustc gcovr
-          # Build Google Test from source (Ubuntu libgtest-dev is headers-only)
-          cd /usr/src/googletest
-          sudo cmake . && sudo make
-          sudo cp lib/libgtest*.a /usr/lib/
+          # cpptrace 由 CMake FetchContent 自动获取（需要网络）
 
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -32,25 +31,31 @@ jobs:
       - name: Unit tests
         run: cd build && sudo ctest --output-on-failure -L unit
 
-      - name: Integration tests
-        run: cd build && sudo ctest --output-on-failure -L integration
-
       - name: Doctor check
         run: |
           if [ -x ./build/cppjudge ]; then
             sudo ./build/cppjudge doctor
           else
-            echo "[SKIP] cppjudge binary not built yet (expected before Task 11)"
+            echo "[SKIP] cppjudge binary not built"
           fi
+
+      # 集成/安全测试需要 cgroup v2 + namespace（真沙箱）。GitHub runner 一般满足；
+      # 若某 runner 缺失相关内核特性，这些步骤会失败并给出诊断。
+      - name: Integration tests
+        run: cd build && sudo ctest --output-on-failure -L integration
+
+      - name: Security tests
+        run: cd build && sudo ctest --output-on-failure -L security
 
       - name: Coverage
         run: |
           cmake -S . -B build_cov -DCMAKE_BUILD_TYPE=Coverage
           cmake --build build_cov -j$(nproc)
-          cd build_cov && sudo ctest --output-on-failure || true
-          gcovr -r .. --xml -o coverage.xml
+          cd build_cov && sudo ctest --output-on-failure -L unit || true
+          gcovr -r .. --exclude '.*_deps.*' --xml -o coverage.xml
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           files: build_cov/coverage.xml
+        continue-on-error: true

@@ -71,3 +71,6 @@ Testing/
 
 # CMake gtest discovery temp files
 cmake_test_discovery_*.json
+
+# macOS
+.DS_Store

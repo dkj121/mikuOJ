@@ -1,0 +1,11 @@
+# 统一换行为 LF（项目为 Linux 目标，WSL2/Windows 混合开发防 CRLF）
+* text=auto eol=lf
+
+*.sh   text eol=lf
+*.cpp  text eol=lf
+*.h    text eol=lf
+*.cmake text eol=lf
+*.md   text eol=lf
+
+*.png  binary
+*.jpg  binary
