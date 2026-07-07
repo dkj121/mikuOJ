@@ -1,5 +1,6 @@
 #include "cppjudge/cgroup_manager.h"
 
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -114,10 +115,30 @@ Manager Manager::create(const std::string& sandbox_id) {
 
 bool Manager::write_control(const std::string& file, const std::string& value) const {
     if (!valid_) return false;
-    std::ofstream f(path_ + "/" + file);
-    if (!f.is_open()) return false;
-    f << value;
-    return f.good();
+    // 直接用 write() 并检查返回值：cgroup 控制文件的写入错误（如 attach 已退出进程
+    // 的 ESRCH、非法值的 EINVAL）发生在真正的 write 系统调用时。ofstream 会缓冲，
+    // f.good() 在析构 flush 前求值，无法反映内核是否接受写入，会掩盖失败。
+    const std::string path = path_ + "/" + file;
+    int fd = ::open(path.c_str(), O_WRONLY | O_CLOEXEC);
+    if (fd < 0) return false;
+    bool ok = true;
+    ssize_t n = ::write(fd, value.data(), value.size());
+    if (n < 0 || static_cast<size_t>(n) != value.size()) ok = false;
+    ::close(fd);
+    return ok;
+}
+
+bool Manager::write_control_optional(const std::string& file, const std::string& value) const {
+    if (!valid_) return false;
+    // 与 write_control 相同，但控制文件不存在（ENOENT）视为成功：用于内核未开启
+    // 相应特性时可缺省的文件（如 swap 记账关闭时的 memory.swap.max）。
+    const std::string path = path_ + "/" + file;
+    int fd = ::open(path.c_str(), O_WRONLY | O_CLOEXEC);
+    if (fd < 0) return errno == ENOENT;
+    ssize_t n = ::write(fd, value.data(), value.size());
+    bool ok = !(n < 0 || static_cast<size_t>(n) != value.size());
+    ::close(fd);
+    return ok;
 }
 
 std::string Manager::read_control(const std::string& file) const {
@@ -130,7 +151,9 @@ bool Manager::apply(const Limits& limits) {
     bool ok = true;
     if (limits.memory_bytes > 0) {
         ok = write_control("memory.max", std::to_string(limits.memory_bytes)) && ok;
-        ok = write_control("memory.swap.max", "0") && ok;  // 禁用 swap
+        // 禁用 swap；内核未开启 swap 记账时 memory.swap.max 不存在，视为成功
+        // （此时该 cgroup 无独立 swap 配额，物理内存上限仍由 memory.max 保证）。
+        ok = write_control_optional("memory.swap.max", "0") && ok;
     }
     if (limits.max_pids > 0) {
         ok = write_control("pids.max", std::to_string(limits.max_pids)) && ok;

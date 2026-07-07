@@ -108,6 +108,8 @@ public:
 
 private:
     bool        write_control(const std::string& file, const std::string& value) const;
+    // 与 write_control 相同，但控制文件不存在（ENOENT）视为成功。
+    bool        write_control_optional(const std::string& file, const std::string& value) const;
     std::string read_control(const std::string& file) const;
 
     std::string path_;       // cgroup 绝对路径

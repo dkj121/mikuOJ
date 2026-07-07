@@ -12,10 +12,39 @@
 
 namespace cppjudge {
 
+namespace {
+
+// 校验 s[i..] 是否为合法的 UTF-8 多字节序列（首字节已知为 >= 0x80）。
+// 合法则返回该序列长度（2..4），否则返回 0。拒绝过长编码与代理区/越界码点。
+int utf8_sequence_len(const std::string& s, size_t i) {
+    const unsigned char c = static_cast<unsigned char>(s[i]);
+    int len;
+    unsigned int cp;
+    if ((c & 0xE0) == 0xC0) { len = 2; cp = c & 0x1F; }
+    else if ((c & 0xF0) == 0xE0) { len = 3; cp = c & 0x0F; }
+    else if ((c & 0xF8) == 0xF0) { len = 4; cp = c & 0x07; }
+    else return 0;  // 0x80..0xBF 独立续接字节，或 0xF8+ 非法首字节
+    if (i + static_cast<size_t>(len) > s.size()) return 0;
+    for (int k = 1; k < len; ++k) {
+        const unsigned char cc = static_cast<unsigned char>(s[i + k]);
+        if ((cc & 0xC0) != 0x80) return 0;  // 续接字节必须是 10xxxxxx
+        cp = (cp << 6) | (cc & 0x3F);
+    }
+    // 拒绝过长编码（非最短形式）与非法码点
+    static const unsigned int kMin[5] = {0, 0, 0x80, 0x800, 0x10000};
+    if (cp < kMin[len]) return 0;
+    if (cp > 0x10FFFF) return 0;
+    if (cp >= 0xD800 && cp <= 0xDFFF) return 0;  // UTF-16 代理区
+    return len;
+}
+
+}  // namespace
+
 std::string Logger::json_escape(const std::string& s) {
     std::string out;
     out.reserve(s.size() + 8);
-    for (unsigned char c : s) {
+    for (size_t i = 0; i < s.size(); ++i) {
+        unsigned char c = static_cast<unsigned char>(s[i]);
         switch (c) {
             case '"':  out += "\\\""; break;
             case '\\': out += "\\\\"; break;
@@ -29,8 +58,18 @@ std::string Logger::json_escape(const std::string& s) {
                     char buf[8];
                     std::snprintf(buf, sizeof(buf), "\\u%04x", c);
                     out += buf;
+                } else if (c < 0x80) {
+                    out += static_cast<char>(c);  // 可打印 ASCII（含 0x7F DEL，JSON 合法）
                 } else {
-                    out += static_cast<char>(c);
+                    // 非 ASCII：仅当构成合法 UTF-8 序列时原样保留，否则用 U+FFFD 替换，
+                    // 保证输出始终是合法 UTF-8（RFC 8259 要求）。
+                    int len = utf8_sequence_len(s, i);
+                    if (len > 0) {
+                        out.append(s, i, static_cast<size_t>(len));
+                        i += static_cast<size_t>(len) - 1;
+                    } else {
+                        out += "\\ufffd";
+                    }
                 }
         }
     }
