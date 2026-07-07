@@ -11,7 +11,6 @@
 #include <getopt.h>
 #include <sys/stat.h>
 
-#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <optional>
@@ -28,15 +27,24 @@ constexpr const char* kVersion = "0.1.0-dev";
 // 判决优先级（高→低）。SV 高于 RE/WA（修 D4）。
 int verdict_rank(Verdict v) {
     switch (v) {
-        case Verdict::SE:  return 100;
-        case Verdict::CE:  return 90;
-        case Verdict::TLE: return 80;
-        case Verdict::MLE: return 70;
-        case Verdict::OLE: return 60;
-        case Verdict::SV:  return 50;
-        case Verdict::RE:  return 40;
-        case Verdict::WA:  return 30;
-        case Verdict::AC:  return 0;
+        case Verdict::SE:
+            return 100;
+        case Verdict::CE:
+            return 90;
+        case Verdict::TLE:
+            return 80;
+        case Verdict::MLE:
+            return 70;
+        case Verdict::OLE:
+            return 60;
+        case Verdict::SV:
+            return 50;
+        case Verdict::RE:
+            return 40;
+        case Verdict::WA:
+            return 30;
+        case Verdict::AC:
+            return 0;
     }
     return -1;
 }
@@ -54,31 +62,29 @@ std::string read_file(const std::string& path) {
 
 // 向 stdout 打印一条结构化最终结果（stdout 专供结果，见全局约束）。
 void emit_result(Verdict v, int test_count = -1) {
-    std::cout << "{\"final_verdict\":\"" << Logger::json_escape(verdict_to_string(v))
-              << "\"";
+    std::cout << "{\"final_verdict\":\"" << Logger::json_escape(verdict_to_string(v)) << "\"";
     if (test_count >= 0) std::cout << ",\"test_count\":" << test_count;
     std::cout << "}\n";
 }
 
 void print_usage(const char* prog) {
-    std::cerr
-        << "Usage: " << prog << " <command> [options]\n\n"
-        << "Commands:\n"
-        << "  judge     Judge a submission\n"
-        << "  doctor    Check environment readiness\n"
-        << "  version   Print version\n"
-        << "  help      Show this help\n\n"
-        << "Judge options:\n"
-        << "  --problem=<dir>            Problem directory (required)\n"
-        << "  --submission=<file>        Submission file (required)\n"
-        << "  --lang=<lang>              Language override (cpp/c/python3/java/go/rust)\n"
-        << "  --time-limit-ms=<N>        CPU time limit override\n"
-        << "  --memory-limit-mb=<N>      Memory limit override\n"
-        << "  --output-limit-mb=<N>      Output size limit override\n"
-        << "  --compile-time-limit-ms=<N>\n"
-        << "  --compare-mode=<mode>      'exact' or 'floating'\n"
-        << "  --sandbox-type=<type>      'auto' | 'linux-ns' | 'nsjail'\n"
-        << "  --verbose                  Verbose diagnostics\n";
+    std::cerr << "Usage: " << prog << " <command> [options]\n\n"
+              << "Commands:\n"
+              << "  judge     Judge a submission\n"
+              << "  doctor    Check environment readiness\n"
+              << "  version   Print version\n"
+              << "  help      Show this help\n\n"
+              << "Judge options:\n"
+              << "  --problem=<dir>            Problem directory (required)\n"
+              << "  --submission=<file>        Submission file (required)\n"
+              << "  --lang=<lang>              Language override (cpp/c/python3/java/go/rust)\n"
+              << "  --time-limit-ms=<N>        CPU time limit override\n"
+              << "  --memory-limit-mb=<N>      Memory limit override\n"
+              << "  --output-limit-mb=<N>      Output size limit override\n"
+              << "  --compile-time-limit-ms=<N>\n"
+              << "  --compare-mode=<mode>      'exact' or 'floating'\n"
+              << "  --sandbox-type=<type>      'auto' | 'linux-ns' | 'nsjail'\n"
+              << "  --verbose                  Verbose diagnostics\n";
 }
 
 struct JudgeArgs {
@@ -98,35 +104,59 @@ int run_judge(int argc, char* argv[]) {
     JudgeArgs a;
 
     static struct option long_opts[] = {
-        {"problem",                required_argument, nullptr, 'p'},
-        {"submission",             required_argument, nullptr, 's'},
-        {"lang",                   required_argument, nullptr, 'l'},
-        {"time-limit-ms",          required_argument, nullptr, 't'},
-        {"memory-limit-mb",        required_argument, nullptr, 'm'},
-        {"output-limit-mb",        required_argument, nullptr, 'o'},
-        {"compile-time-limit-ms",  required_argument, nullptr, 'c'},
-        {"compare-mode",           required_argument, nullptr, 'C'},
-        {"sandbox-type",           required_argument, nullptr, 'S'},
-        {"verbose",                no_argument,       nullptr, 'v'},
-        {"help",                   no_argument,       nullptr, 'h'},
+        {"problem", required_argument, nullptr, 'p'},
+        {"submission", required_argument, nullptr, 's'},
+        {"lang", required_argument, nullptr, 'l'},
+        {"time-limit-ms", required_argument, nullptr, 't'},
+        {"memory-limit-mb", required_argument, nullptr, 'm'},
+        {"output-limit-mb", required_argument, nullptr, 'o'},
+        {"compile-time-limit-ms", required_argument, nullptr, 'c'},
+        {"compare-mode", required_argument, nullptr, 'C'},
+        {"sandbox-type", required_argument, nullptr, 'S'},
+        {"verbose", no_argument, nullptr, 'v'},
+        {"help", no_argument, nullptr, 'h'},
         {nullptr, 0, nullptr, 0},
     };
 
     int opt;
     while ((opt = getopt_long(argc, argv, "", long_opts, nullptr)) != -1) {
         switch (opt) {
-            case 'p': a.problem_dir = optarg; break;
-            case 's': a.submission_file = optarg; break;
-            case 'l': a.lang_override = optarg; break;
-            case 't': a.cpu_time_ms = std::stoull(optarg); break;
-            case 'm': a.memory_mb = std::stoull(optarg); break;
-            case 'o': a.output_mb = std::stoull(optarg); break;
-            case 'c': a.compile_ms = std::stoull(optarg); break;
-            case 'C': a.compare_mode = optarg; break;
-            case 'S': a.sandbox_type = optarg; break;
-            case 'v': a.verbose = true; break;
-            case 'h': print_usage("cppjudge"); return 0;
-            default:  print_usage("cppjudge"); return 2;
+            case 'p':
+                a.problem_dir = optarg;
+                break;
+            case 's':
+                a.submission_file = optarg;
+                break;
+            case 'l':
+                a.lang_override = optarg;
+                break;
+            case 't':
+                a.cpu_time_ms = std::stoull(optarg);
+                break;
+            case 'm':
+                a.memory_mb = std::stoull(optarg);
+                break;
+            case 'o':
+                a.output_mb = std::stoull(optarg);
+                break;
+            case 'c':
+                a.compile_ms = std::stoull(optarg);
+                break;
+            case 'C':
+                a.compare_mode = optarg;
+                break;
+            case 'S':
+                a.sandbox_type = optarg;
+                break;
+            case 'v':
+                a.verbose = true;
+                break;
+            case 'h':
+                print_usage("cppjudge");
+                return 0;
+            default:
+                print_usage("cppjudge");
+                return 2;
         }
     }
 
@@ -163,22 +193,22 @@ int run_judge(int argc, char* argv[]) {
     auto problem = ProblemManager::load(a.problem_dir, error);
     if (!problem || !ProblemManager::validate(*problem, error)) {
         spdlog::error("cannot load problem: {}", error);
-        emit_result(Verdict::SE);   // 修 D12：SE 也要输出到 stdout
+        emit_result(Verdict::SE);  // 修 D12：SE 也要输出到 stdout
         return 3;
     }
 
     // 解析限制：以题目为基线，CLI 显式覆盖（修 D10）
     Limits limits = problem->limits;
-    if (a.cpu_time_ms) limits.cpu_time_ms   = *a.cpu_time_ms;
-    if (a.memory_mb)   limits.memory_mb     = *a.memory_mb;
-    if (a.output_mb)   limits.output_size_mb = *a.output_mb;
-    if (a.compile_ms)  limits.compile_time_ms = *a.compile_ms;
-    limits.wall_time_ms = limits.cpu_time_ms * 3;
+    if (a.cpu_time_ms) {
+        limits.cpu_time_ms = *a.cpu_time_ms;
+        limits.wall_time_ms = ProblemManager::safe_wall_time(limits.cpu_time_ms);
+    }
+    if (a.memory_mb) limits.memory_mb = *a.memory_mb;
+    if (a.output_mb) limits.output_size_mb = *a.output_mb;
+    if (a.compile_ms) limits.compile_time_ms = *a.compile_ms;
 
-    std::string compare_mode =
-        !a.compare_mode.empty() ? a.compare_mode : problem->compare_mode;
-    std::string sandbox_type =
-        !a.sandbox_type.empty() ? a.sandbox_type : problem->sandbox_type;
+    std::string compare_mode = !a.compare_mode.empty() ? a.compare_mode : problem->compare_mode;
+    std::string sandbox_type = !a.sandbox_type.empty() ? a.sandbox_type : problem->sandbox_type;
     if (sandbox_type.empty()) sandbox_type = "auto";
 
     // 选择沙箱后端（真正按类型分发，修 D11）
@@ -203,8 +233,8 @@ int run_judge(int argc, char* argv[]) {
         rr.error_detail = comp.error_detail;
         rr.run_id = run_dir;
         rr.run_dir = run_dir;
-        Logger::write_log("build/judge_log.json", a.problem_dir, a.submission_file,
-                          Verdict::SE, {rr});
+        Logger::write_log("build/judge_log.json", a.problem_dir, a.submission_file, Verdict::SE,
+                          {rr});
         emit_result(Verdict::SE);
         return 3;
     }
@@ -215,8 +245,8 @@ int run_judge(int argc, char* argv[]) {
         rr.error_detail = comp.output.empty() ? comp.error_detail : comp.output;
         rr.run_id = run_dir;
         rr.run_dir = run_dir;
-        Logger::write_log("build/judge_log.json", a.problem_dir, a.submission_file,
-                          Verdict::CE, {rr});
+        Logger::write_log("build/judge_log.json", a.problem_dir, a.submission_file, Verdict::CE,
+                          {rr});
         emit_result(Verdict::CE, 0);
         return 1;
     }
@@ -259,11 +289,11 @@ int run_judge(int argc, char* argv[]) {
         } else {
             std::string user_out = read_file(req.stdout_path);
             std::string expected = read_file(tc.output_file);
-            CompareResult cr = (compare_mode == "floating")
-                ? Comparator::compare_floating(user_out, expected,
-                                               problem->float_abs_eps,
-                                               problem->float_rel_eps)
-                : Comparator::compare_exact(user_out, expected);
+            CompareResult cr =
+                (compare_mode == "floating")
+                    ? Comparator::compare_floating(user_out, expected, problem->float_abs_eps,
+                                                   problem->float_rel_eps)
+                    : Comparator::compare_exact(user_out, expected);
             if (cr.is_match) {
                 tr.verdict = Verdict::AC;
             } else {
@@ -272,19 +302,19 @@ int run_judge(int argc, char* argv[]) {
             }
         }
 
-        spdlog::info("test {}: {} ({}ms, {}KB)", tc.index,
-                     verdict_to_string(tr.verdict), tr.time_ms, tr.memory_kb);
+        spdlog::info("test {}: {} ({}ms, {}KB)", tc.index, verdict_to_string(tr.verdict),
+                     tr.time_ms, tr.memory_kb);
         final_verdict = merge_verdict(final_verdict, tr.verdict);
         results.push_back(tr);
     }
 
-    Logger::write_log("build/judge_log.json", a.problem_dir, a.submission_file,
-                      final_verdict, results);
+    Logger::write_log("build/judge_log.json", a.problem_dir, a.submission_file, final_verdict,
+                      results);
     emit_result(final_verdict, static_cast<int>(results.size()));
     return final_verdict == Verdict::AC ? 0 : 1;
 }
 
-} // namespace
+}  // namespace
 
 int main(int argc, char* argv[]) {
     cppjudge::log::install_crash_handler();
@@ -294,8 +324,11 @@ int main(int argc, char* argv[]) {
         return 2;
     }
     std::string cmd = argv[1];
-    if (cmd == "judge")   return run_judge(argc - 1, argv + 1);
-    if (cmd == "doctor")  { cppjudge::log::init(false); return cppjudge::Doctor::check() ? 0 : 2; }
+    if (cmd == "judge") return run_judge(argc - 1, argv + 1);
+    if (cmd == "doctor") {
+        cppjudge::log::init(false);
+        return cppjudge::Doctor::check() ? 0 : 2;
+    }
     if (cmd == "version" || cmd == "--version") {
         std::cout << "cppjudge " << kVersion << "\n";
         return 0;
