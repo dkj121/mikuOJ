@@ -1,0 +1,21 @@
+repos:
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v17.0.6
+    hooks:
+      - id: clang-format
+        args: [--style=file, --fallback-style=Google]
+        files: \.(cpp|h)$
+  - repo: local
+    hooks:
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+        entry: sed -i 's/[[:space:]]*$//'
+        language: system
+        files: \.(cpp|h|cmake|txt|md|yaml|sh)$
+        types: [text]
+      - id: no-large-files
+        name: Check for large files
+        entry: bash -c 'for f in "$@"; do s=$(stat -c%s "$f"); if [ $s -gt 500000 ]; then echo "$f: $s bytes"; exit 1; fi; done' --
+        language: system
+        files: .*
+        exclude: coverage\.html

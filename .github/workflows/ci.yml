@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential cmake \
+            libseccomp-dev libyaml-cpp-dev libgtest-dev \
+            python3 default-jdk golang-go rustc
+          cd /usr/src/gtest
+          sudo cmake . && sudo make
+          sudo cp lib/libgtest*.a /usr/lib/
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+      - name: Unit tests
+        run: cd build && sudo ctest --output-on-failure -L unit
+
+      - name: Integration tests
+        run: cd build && sudo ctest --output-on-failure -L integration
+
+      - name: Doctor check
+        run: sudo ./build/cppjudge doctor
+
+      - name: Coverage
+        run: |
+          cmake -S . -B build_cov -DCMAKE_BUILD_TYPE=Coverage
+          cmake --build build_cov -j$(nproc)
+          cd build_cov && sudo ctest --output-on-failure || true
+          gcovr -r .. --xml -o coverage.xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: build_cov/coverage.xml
