@@ -69,7 +69,17 @@ std::vector<std::string> jvm_names() {
     for (const char* n : {"shmget", "shmat", "shmdt", "shmctl",
                           "msync", "mincore", "times",
                           "sched_get_priority_max", "sched_get_priority_min",
-                          "setpriority", "getpriority"}) {
+                          "setpriority", "getpriority",
+                          // JVM 运行时较广的系统调用面（据 strace 实测）
+                          "statfs", "fstatfs", "sched_setattr", "sched_getattr",
+                          "getcpu", "set_mempolicy", "get_mempolicy", "mbind",
+                          "openat2", "name_to_handle_at", "clock_getres",
+                          "rt_sigtimedwait", "rt_sigpending", "rt_sigsuspend",
+                          "setrlimit", "getrlimit",
+                          "fchdir", "flock", "ftruncate", "prctl",
+                          // JVM 需要本地 socket；真正的网络隔离由 CLONE_NEWNET(空网络命名空间)
+                          // 保证，故此处放行 socket/connect 不会带来网络访问。
+                          "socket", "connect"}) {
         v.emplace_back(n);
     }
     return v;

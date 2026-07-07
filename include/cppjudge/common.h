@@ -45,7 +45,7 @@ struct Limits {
     uint64_t memory_mb            = 256;
     uint64_t stack_mb             = 8;
     uint64_t output_size_mb       = 10;
-    uint32_t max_processes        = 1;
+    uint32_t max_processes        = 64;   // 允许多线程运行时(Go/JVM/线程 Python)，仍防 fork 炸弹(修 D9)
     uint64_t compile_time_ms      = 5000;
 };
 

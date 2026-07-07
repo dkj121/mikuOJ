@@ -18,7 +18,8 @@ std::string to_lower(std::string s) {
 }
 
 // 编译阶段的默认资源限制：{cpu, wall, mem_mb, stack_mb, out_mb, max_proc, compile_ms}
-constexpr Limits kCompileLimits{10000, 40000, 1024, 256, 64, 64, 10000};
+// 内存/进程给得较宽：go/javac 等编译器自身是大程序、会起多线程。
+constexpr Limits kCompileLimits{15000, 60000, 2048, 256, 64, 256, 15000};
 
 std::vector<LanguageRuntimeConfig> build_configs() {
     std::vector<LanguageRuntimeConfig> cfgs;
@@ -82,8 +83,12 @@ std::vector<LanguageRuntimeConfig> build_configs() {
         c.interpreter_path = resolve_tool({"java"});
         c.run_args = {"-XX:-UsePerfData", "-cp", ".", "Main"};
         c.seccomp_profile = SeccompProfile::JVM;
+        // JVM 依赖：JDK 本体 + Debian 把 java.security 等配置放在 /etc/java-*
         c.extra_mounts = {{"/usr/lib/jvm", "/usr/lib/jvm", false},
-                          {"/etc/alternatives", "/etc/alternatives", false}};
+                          {"/etc/alternatives", "/etc/alternatives", false},
+                          {"/etc/java-11-openjdk", "/etc/java-11-openjdk", false},
+                          {"/etc/java-17-openjdk", "/etc/java-17-openjdk", false},
+                          {"/etc/java-21-openjdk", "/etc/java-21-openjdk", false}};
         c.compile_limits = kCompileLimits;
         cfgs.push_back(c);
     }
@@ -97,7 +102,8 @@ std::vector<LanguageRuntimeConfig> build_configs() {
         c.compiler_path = resolve_tool({"go"});
         c.compile_args = {"build", "-o", "solution", "submission.go"};
         c.artifact_name = "solution";
-        c.compile_env = {"GO111MODULE=off", "GOFLAGS=-mod=mod"};
+        c.compile_env = {"GO111MODULE=off", "GOPATH=/tmp/go",
+                         "GOCACHE=/tmp/gocache", "CGO_ENABLED=0"};
         c.seccomp_profile = SeccompProfile::Standard;
         c.extra_mounts = {{"/usr/lib/go", "/usr/lib/go", false}};
         c.compile_limits = kCompileLimits;
