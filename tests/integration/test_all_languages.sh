@@ -22,7 +22,7 @@ echo "=== multi-language AC ==="
 run "C++"     submissions/cpp/solution.cpp      g++
 run "C"       submissions/c/solution.c          gcc
 run "Python3" submissions/python3/solution.py   python3
-run "Java"    submissions/java/Main.java         javac
+run "Java"    submissions/java/solution.java     javac
 run "Go"      submissions/go/solution.go         go
 run "Rust"    submissions/rust/solution.rs       rustc
 echo "=== $PASS passed, $FAIL failed, $SKIP skipped ==="
