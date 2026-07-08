@@ -38,6 +38,9 @@ std::vector<std::string> strict_names() {
         "tgkill", "tkill",
         // 阻塞型系统调用被信号中断后，内核用 restart_syscall 续跑（ERESTART_RESTARTBLOCK）。
         "restart_syscall",
+        // getrlimit/setrlimit：老版资源限制查询/设置。Go runtime 和部分 glibc 路径仍直接
+        // 调用（非 prlimit64 包装），缺失会导致 Go 二进制被判 SV。
+        "getrlimit", "setrlimit",
     };
 }
 
